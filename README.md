@@ -1,6 +1,9 @@
 # Parse LOG
 ## _rust tail implementation to parse files_
 
+##install
+pip install https://pypi.org/project/parse-log/
+
 ## Features
 
 - Load N lines or all lines
