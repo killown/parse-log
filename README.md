@@ -2,7 +2,7 @@
 ## _rust tail implementation to parse files_
 
 ## install
-https://pypi.org/project/parse-log/https://pypi.org/project/parse-log/
+https://pypi.org/project/parse-log/
 
 ## Features
 
