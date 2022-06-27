@@ -108,7 +108,8 @@ fn backward(file: &mut File, num_delimiters: u64, delimiter: u8) {
     }
 }
 
-fn parse_value(line: &str, begin_delimiter: &str, end_delimiter: &str)  -> String {
+// split lines based on the given delimiters
+fn extract_from_line(line: &str, begin_delimiter: &str, end_delimiter: &str)  -> String {
     let mut value = line;
     if begin_delimiter.is_empty() == true && end_delimiter.is_empty() == true {
      value = line;
@@ -126,11 +127,13 @@ fn parse_value(line: &str, begin_delimiter: &str, end_delimiter: &str)  -> Strin
 }
 
 #[pyfunction]
+// get the line in list format
 fn parse_line(line: &str, begin_delimiter: &str, end_delimiter: &str)-> PyResult<String> {
-    let r = parse_value(line, begin_delimiter, end_delimiter);
+    let r = extract_from_line(line, begin_delimiter, end_delimiter);
     Ok(r)
 }
 
+// return the total number of file lines
 pub fn count_lines(path: &str) -> u64 {
     let file = BufReader::new(File::open(path).expect("Unable to open file"));
     let mut cnt  = 0;
@@ -142,6 +145,7 @@ pub fn count_lines(path: &str) -> u64 {
     return cnt;
 }
 
+// drop line if it does not contains the given &str
 fn match_lines(matchers: &[&str], line: &str) -> bool {
     for m in matchers {
         if line.contains(m){
@@ -151,8 +155,10 @@ fn match_lines(matchers: &[&str], line: &str) -> bool {
     return false;
 }
 
+// search and || or ignore lines based on the given strings
 fn extract_lines(lines: String, begin_delimiter: &str, end_delimiter: &str, search: &str, ignore: &str) -> Vec<String> {
-    let mut vec = Vec::new();
+    let mut parsed_lines = Vec::new();
+    // search with one or mores args "search1, search2" converted into list
     let search_lines:  Vec<&str> = search
                                   .split(",")
                                   .map(|s| s.trim())
@@ -163,32 +169,105 @@ fn extract_lines(lines: String, begin_delimiter: &str, end_delimiter: &str, sear
                                   .map(|s| s.trim())
                                   .filter(|s| !s.is_empty())
                                   .collect::<Vec<_>>();
+    // search, ignore or both then return parsed lines
     for line in lines.split("\n") {
         if ignore != "" {
             if match_lines(&ignore_lines, line) {
                 continue;
             }
         }
+        // chars in search_lines splited by must match with the actual line
         if match_lines(&search_lines, line) {
-            let value = parse_value(line, begin_delimiter, end_delimiter);
-            if !value.is_empty() {
-                vec.push(value);
+            let parsed_line = extract_from_line(line, begin_delimiter, end_delimiter);
+            // after parse the line we trim it case it's necessary, before push into the parsed lines
+            if !parsed_line.is_empty() {
+                let result_line;
+                let trim_line = parsed_line.trim();
+                if trim_line.len() < parsed_line.len() {
+                    result_line = trim_line.to_string();
+                }
+                else{
+                    result_line = parsed_line;
+                }
+                parsed_lines.push(result_line);
             }
         }
     }
-    return vec;
+    return parsed_lines;
 }
 
-#[pyfunction]
-fn search_lines(filename: &str, search: &str, ignore: &str, number_of_lines: u64)  -> PyResult<Vec<String>> {
+
+fn fsearch(filename: &str, search: &str, ignore: &str, ignore_mode: bool, number_of_lines: u64) -> Vec<String> {
     let mut n = number_of_lines;
     //if argument for number_of_lines is 0, then use the entire file
     if n == 0 {
         n = count_lines(filename);
     }
+    let r;
     let mut contents =  File::open(&filename)
                     .expect("Something went wrong reading the file");
-    let r = tail_parse(&mut contents, n, "", "", search, ignore);
+    if ignore_mode {
+        r = tail_parse(&mut contents, n, "", "", search, ignore);
+    }
+    else{
+        r = tail_parse(&mut contents, n, "", "", search, "");
+    }
+    return r;
+}
+
+fn fsearch_last_line(filename: &str, search: &str, ignore: &str, ignore_mode: bool) -> Vec<String> {
+    let mut counter = 0u64;
+    let mut search_found;
+    loop {
+        counter += 1;
+        if ignore_mode {
+            search_found = fsearch(filename, search, ignore, true, counter);
+        }
+        else{
+            search_found = fsearch(filename, search, "", false, counter);
+        }
+        if !search_found.is_empty() {
+            break;
+        }
+    }
+    return search_found;
+}
+
+#[pyfunction]
+fn search_last_line(filename: &str, search: &str) -> PyResult<Vec<String>> {
+    let r = fsearch_last_line(filename, search, "", false);
+    Ok(r)
+}
+
+#[pyfunction]
+fn isearch_last_line(filename: &str, search: &str, ignore: &str) -> PyResult<Vec<String>> {
+    let r = fsearch_last_line(filename, search, ignore, true);
+    Ok(r)
+}
+
+#[pyfunction]
+fn search_lines(filename: &str, search: &str, number_of_lines: u64) -> PyResult<Vec<String>> {
+    let r = fsearch(filename, search, "", false, number_of_lines);
+    Ok(r)
+}
+
+#[pyfunction]
+fn search_all(filename: &str, search: &str) -> PyResult<Vec<String>> {
+    let r = fsearch(filename, search, "", false, 0);
+    Ok(r)
+}
+
+#[pyfunction]
+fn isearch_all(filename: &str, search: &str, ignore: &str) -> PyResult<Vec<String>> {
+    let ignore_mode = true;
+    let r = fsearch(filename, search, ignore, ignore_mode, 0);
+    Ok(r)
+}
+
+#[pyfunction]
+fn isearch_lines(filename: &str, search: &str, ignore: &str, number_of_lines: u64) -> PyResult<Vec<String>> {
+    let ignore_mode = true;
+    let r = fsearch(filename, search, ignore, ignore_mode, number_of_lines);
     Ok(r)
 }
 
@@ -220,5 +299,10 @@ fn tail(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(lines, m)?)?;
     m.add_function(wrap_pyfunction!(parse_line, m)?)?;
     m.add_function(wrap_pyfunction!(search_lines, m)?)?;
+    m.add_function(wrap_pyfunction!(isearch_lines, m)?)?;
+    m.add_function(wrap_pyfunction!(search_all, m)?)?;
+    m.add_function(wrap_pyfunction!(isearch_all, m)?)?;
+    m.add_function(wrap_pyfunction!(search_last_line, m)?)?;
+    m.add_function(wrap_pyfunction!(isearch_last_line, m)?)?;
     Ok(())
 }
