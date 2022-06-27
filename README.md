@@ -7,6 +7,9 @@
 - search and ignore lines with certain strings
 - parse lines and extract what you want
 
+## URL
+https://pypi.org/project/parse-log/
+
 ## Usage
 ```python
 import tail
