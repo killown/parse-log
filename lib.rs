@@ -25,7 +25,6 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.*/
 
 
-
 use pyo3::prelude::*;
 use std::fs::{File};
 use std::io::{Read, Seek, SeekFrom};
@@ -111,10 +110,10 @@ fn backward(file: &mut File, num_delimiters: u64, delimiter: u8) {
 // split lines based on the given delimiters
 fn extract_from_line(line: &str, begin_delimiter: &str, end_delimiter: &str)  -> String {
     let mut value = line;
-    if begin_delimiter.is_empty() == true && end_delimiter.is_empty() == true {
+    if begin_delimiter.is_empty() && end_delimiter.is_empty() {
      value = line;
     }
-    if begin_delimiter.is_empty() == false && end_delimiter.is_empty() == false {
+    if !begin_delimiter.is_empty() && !end_delimiter.is_empty() {
         value = line
        .split(begin_delimiter)
        .nth(1)
@@ -123,7 +122,7 @@ fn extract_from_line(line: &str, begin_delimiter: &str, end_delimiter: &str)  ->
        .next()
        .unwrap();
        }
-    return value.to_string();
+    value.to_string()
 }
 
 #[pyfunction]
@@ -139,10 +138,9 @@ pub fn count_lines(path: &str) -> u64 {
     let mut cnt  = 0;
 
     for _ in file.lines() {
-        cnt = cnt + 1;
+        cnt += 1;
     }
-
-    return cnt;
+    cnt
 }
 
 // drop line if it does not contains the given &str
@@ -152,29 +150,27 @@ fn match_lines(matchers: &[&str], line: &str) -> bool {
             return true;
         }
     }
-    return false;
+    false
 }
 
 // search and || or ignore lines based on the given strings
 fn extract_lines(lines: String, begin_delimiter: &str, end_delimiter: &str, search: &str, ignore: &str) -> Vec<String> {
-    let mut parsed_lines = Vec::new();
+    let mut parsed_lines: Vec<String> = Vec::new();
     // search with one or mores args "search1, search2" converted into list
     let search_lines:  Vec<&str> = search
-                                  .split(",")
+                                  .split(',')
                                   .map(|s| s.trim())
                                   .filter(|s| !s.is_empty())
                                   .collect::<Vec<_>>();
     let ignore_lines: Vec<&str> = ignore
-                                  .split(",")
+                                  .split(',')
                                   .map(|s| s.trim())
                                   .filter(|s| !s.is_empty())
                                   .collect::<Vec<_>>();
     // search, ignore or both then return parsed lines
-    for line in lines.split("\n") {
-        if ignore != "" {
-            if match_lines(&ignore_lines, line) {
-                continue;
-            }
+    for line in lines.split('\n') {
+        if !ignore.is_empty() && match_lines(&ignore_lines, line) {
+            continue;
         }
         // chars in search_lines splited by must match with the actual line
         if match_lines(&search_lines, line) {
@@ -193,7 +189,7 @@ fn extract_lines(lines: String, begin_delimiter: &str, end_delimiter: &str, sear
             }
         }
     }
-    return parsed_lines;
+    parsed_lines
 }
 
 
@@ -203,17 +199,17 @@ fn fsearch(filename: &str, search: &str, ignore: &str, ignore_mode: bool, number
     if n == 0 {
         n = count_lines(filename);
     }
-    let r;
     let mut contents =  File::open(&filename)
                     .expect("Something went wrong reading the file");
+    
     if ignore_mode {
-        r = tail_parse(&mut contents, n, "", "", search, ignore);
+        tail_parse(&mut contents, n, "", "", search, ignore)
     }
     else{
-        r = tail_parse(&mut contents, n, "", "", search, "");
+        tail_parse(&mut contents, n, "", "", search, "")
     }
-    return r;
 }
+
 
 fn fsearch_last_line(filename: &str, search: &str, ignore: &str, ignore_mode: bool) -> Vec<String> {
     let mut counter = 0u64;
@@ -230,7 +226,7 @@ fn fsearch_last_line(filename: &str, search: &str, ignore: &str, ignore_mode: bo
             break;
         }
     }
-    return search_found;
+    search_found
 }
 
 #[pyfunction]
@@ -277,8 +273,7 @@ fn tail_parse(file: &mut File, lines_number: u64, begin_delimiter: &str, end_del
     backward(file, lines_number, delimiter);
     let mut lines = String::new();
     file.read_to_string(&mut lines).expect("The string cannot be read");
-    let vec = extract_lines(lines, begin_delimiter, end_delimiter, search, ignore);
-    return vec;
+    extract_lines(lines, begin_delimiter, end_delimiter, search, ignore)
 }
 
 #[pyfunction]
